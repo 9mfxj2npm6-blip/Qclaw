@@ -112,7 +112,7 @@ export default function OpenClawUpgradeDialog({
 
           {check.enforcement === 'auto_correct' && (
             <Alert color="yellow" variant="light" mt="md">
-              当前版本超出受支持策略，请先回到环境检查页，由启动阶段完成备份后再自动修复到 {check.targetVersion || '2026.3.24'}。
+              当前版本超出已审计策略。为保护你现有的 OpenClaw 数据，Qclaw 会以只读保护模式继续，不会自动改到 {check.targetVersion || '2026.3.24'}。
             </Alert>
           )}
 

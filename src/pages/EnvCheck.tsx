@@ -361,16 +361,16 @@ export function buildOpenClawGateState(
         activeCandidate,
         upgradeCheck,
         canUpgrade: false,
-        canAutoCorrect: true,
-        blocksContinue: true,
+        canAutoCorrect: false,
+        blocksContinue: false,
         statusLabel:
           upgradeCheck.targetAction === 'downgrade'
-            ? `需回退到 ${upgradeCheck.targetVersion || PINNED_OPENCLAW_VERSION}`
-            : `需升级到 ${upgradeCheck.targetVersion || PINNED_OPENCLAW_VERSION}`,
+            ? '高版本只读兼容'
+            : '旧版本只读兼容',
         message:
           upgradeCheck.targetAction === 'downgrade'
-            ? `检测到超出支持范围的 OpenClaw 版本，正在自动回退到 ${upgradeCheck.targetVersion || PINNED_OPENCLAW_VERSION}`
-            : `检测到不受支持的 OpenClaw 版本，正在自动升级到 ${upgradeCheck.targetVersion || PINNED_OPENCLAW_VERSION}`,
+            ? `检测到当前 OpenClaw 版本高于 Qclaw 已审计范围。为保护你现有的 OpenClaw 数据，Qclaw 将以只读保护模式继续，不会自动回退到 ${upgradeCheck.targetVersion || PINNED_OPENCLAW_VERSION}。`
+            : `检测到当前 OpenClaw 版本低于 Qclaw 已审计范围。为保护你现有的 OpenClaw 数据，Qclaw 将以只读保护模式继续，不会自动升级到 ${upgradeCheck.targetVersion || PINNED_OPENCLAW_VERSION}。`,
       }
     case 'manual_block':
       if (!upgradeCheck.blocksContinue) {
@@ -434,10 +434,10 @@ export function buildOpenClawAutoCorrectionConsentMessage(
     '检测到当前 OpenClaw 版本不在 Qclaw 的支持范围内。',
     `当前版本：${currentVersion}`,
     `目标版本：${targetVersion}`,
-    `Qclaw 将自动${action} OpenClaw 到受支持版本后再继续。`,
-    '如果你不接受本次自动处理，Qclaw 将立即退出。',
+    `为保护你现有的 OpenClaw 数据，Qclaw 不会自动${action} OpenClaw。`,
+    '你可以继续以只读保护模式查看状态；写入、安装、修复、删除、恢复或升级操作会被阻止。',
     '',
-    '是否继续？',
+    '请关闭此提示并继续查看状态。',
   ].join('\n')
 }
 
@@ -910,7 +910,7 @@ export default function EnvCheck({
 
       const correctionResult = await window.api.runOpenClawUpgrade()
       if (!correctionResult.ok) {
-        const failureMessage = correctionResult.message || 'OpenClaw 版本自动修复失败'
+        const failureMessage = correctionResult.message || 'OpenClaw 版本写入保护已阻止自动调整'
         setOpenClawUpgradeError(failureMessage)
         setOpenClawGateState(nextGateState)
         setIsRefreshingOpenClawVersion(false)
