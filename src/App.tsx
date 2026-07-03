@@ -8,7 +8,7 @@ import EnvCheck from './pages/EnvCheck'
 import ApiKeys, { type SetupModelContext } from './pages/ApiKeys'
 import ChannelConnect, { type ChannelConnectNextPayload } from './pages/ChannelConnect'
 import PairingCode from './pages/PairingCode'
-import Dashboard from './pages/Dashboard'
+import CommandCenter from './pages/CommandCenter'
 import MainLayout from './components/MainLayout'
 import ChatPage from './pages/ChatPage'
 import ChannelsPage from './pages/ChannelsPage'
@@ -39,7 +39,6 @@ import {
   resolveAppStateAfterSetupCompletion,
   resolveAppStateForPhase1Target,
 } from './shared/dashboard-gateway-gate'
-import type { DashboardEntrySnapshot } from './shared/dashboard-entry-bootstrap'
 import {
   canOpenExternalModelsPage,
   type AppState,
@@ -277,9 +276,6 @@ function App() {
   const [envSummary, setEnvSummary] = useState<EnvCheckReadyPayload | null>(null)
   const [discoveryResult, setDiscoveryResult] = useState<OpenClawDiscoveryResult | null>(null)
   const [pendingPhase1Target, setPendingPhase1Target] = useState<'setup' | 'dashboard' | null>(null)
-  const [pendingOpenUpdateCenter, setPendingOpenUpdateCenter] = useState(false)
-  const [updateCenterOpen, setUpdateCenterOpen] = useState(false)
-  const [dashboardEntrySnapshot, setDashboardEntrySnapshot] = useState<DashboardEntrySnapshot | null>(null)
   const [showContactModal, setShowContactModal] = useState(false)
   const [pluginRepairRunning, setPluginRepairRunning] = useState(false)
   const [pluginRepairResult, setPluginRepairResult] = useState<PluginRepairResult | null>(null)
@@ -320,9 +316,7 @@ function App() {
   }
 
   const handleEnvReady = (summary: EnvCheckReadyPayload) => {
-    setDashboardEntrySnapshot(null)
     setEnvSummary(summary)
-    setUpdateCenterOpen(false)
     const normalizedResult = applyEnvSummaryToDiscovery(summary.discoveryResult || null, summary)
     setDiscoveryResult(normalizedResult)
 
@@ -337,7 +331,6 @@ function App() {
 
     const nextTarget: 'setup' | 'dashboard' = summary.sharedConfigInitialized ? 'dashboard' : 'setup'
     setPendingPhase1Target(nextTarget)
-    setPendingOpenUpdateCenter(false)
 
     // env-check 通过后先进入 update-intercept 阶段
     setAppState('update-intercept')
@@ -360,9 +353,6 @@ function App() {
   const handleSetupComplete = () => {
     setSelectedPairingAccountId(undefined)
     setSelectedPairingAccountName(undefined)
-    setPendingOpenUpdateCenter(false)
-    setUpdateCenterOpen(false)
-    setDashboardEntrySnapshot(null)
     setAppState(resolveAppStateAfterSetupCompletion())
   }
 
@@ -371,20 +361,14 @@ function App() {
       window.location.hash = '#/'
     }
     setPendingPhase1Target(null)
-    setPendingOpenUpdateCenter(false)
     setSetupStep('api-keys')
     setSelectedPairingAccountId(undefined)
     setSelectedPairingAccountName(undefined)
     setSetupModelContext(null)
-    setUpdateCenterOpen(false)
-    setDashboardEntrySnapshot(null)
     setAppState('setup')
   }
 
-  const handleGatewayBootstrapReady = (snapshot: DashboardEntrySnapshot) => {
-    setDashboardEntrySnapshot(snapshot)
-    setUpdateCenterOpen(pendingOpenUpdateCenter)
-    setPendingOpenUpdateCenter(false)
+  const handleGatewayBootstrapReady = () => {
     setAppState('dashboard')
   }
 
@@ -493,48 +477,37 @@ function App() {
     },
   }), [tooltipEnabled])
 
-  const handlePhase1Proceed = (
-    target: 'setup' | 'dashboard',
-    options?: { openUpdateCenter?: boolean }
-  ) => {
+  const handlePhase1Proceed = (target: 'setup' | 'dashboard') => {
     const activeCandidate =
       discoveryResult?.candidates.find((candidate) => candidate.candidateId === discoveryResult.activeCandidateId) ||
       null
 
     if (activeCandidate) {
       setPendingPhase1Target(target)
-      setPendingOpenUpdateCenter(Boolean(options?.openUpdateCenter))
       const nextState = resolveAppStateForPhase1Target(target)
       if (nextState === 'setup') {
-        setPendingOpenUpdateCenter(false)
         setSetupStep('api-keys')
         setSelectedPairingAccountId(undefined)
         setSelectedPairingAccountName(undefined)
         setSetupModelContext(null)
-        setUpdateCenterOpen(false)
         setAppState('setup')
         return
       }
 
-      setUpdateCenterOpen(false)
       setAppState(nextState)
       return
     }
 
     const nextState = resolveAppStateForPhase1Target(target)
     if (nextState === 'setup') {
-      setPendingOpenUpdateCenter(false)
       setSetupStep('api-keys')
       setSelectedPairingAccountId(undefined)
       setSelectedPairingAccountName(undefined)
       setSetupModelContext(null)
-      setUpdateCenterOpen(false)
       setAppState('setup')
       return
     }
 
-    setPendingOpenUpdateCenter(Boolean(options?.openUpdateCenter))
-    setUpdateCenterOpen(false)
     setAppState(nextState)
   }
 
@@ -554,8 +527,6 @@ function App() {
 
   useEffect(() => {
     return window.api.onOpenModelsPage(() => {
-      setPendingOpenUpdateCenter(false)
-      setUpdateCenterOpen(false)
       setAppState((current) => {
         if (!canOpenExternalModelsPage(current)) {
           return current
@@ -724,15 +695,7 @@ function App() {
         <HashRouter>
           <Routes>
             <Route element={<MainLayout />}>
-              <Route index element={
-                <Dashboard
-                  entrySnapshot={dashboardEntrySnapshot}
-                  onReconfigure={handleReconfigure}
-                  onOpenUpdateCenter={() => setUpdateCenterOpen(true)}
-                  pluginRepairRunning={pluginRepairRunning}
-                  pluginRepairResult={pluginRepairResult}
-                />
-              } />
+              <Route index element={<CommandCenter />} />
               <Route
                 path="/chat"
                 element={<ChatPage enterSendMode={chatComposerEnterSendMode} />}

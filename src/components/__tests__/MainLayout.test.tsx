@@ -22,9 +22,110 @@ function createAvailableUpdateStatus(): QClawUpdateStatus {
   }
 }
 
+function renderLayout(path: string, initialUpdate?: QClawUpdateStatus) {
+  return renderToStaticMarkup(
+    <MantineProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <UpdateNotificationProvider initialUpdate={initialUpdate}>
+                <MainLayout />
+              </UpdateNotificationProvider>
+            }
+          >
+            <Route index element={<div>content</div>} />
+            <Route path="channels" element={<div>content</div>} />
+            <Route path="settings" element={<div>content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </MantineProvider>
+  )
+}
+
+function getLinkClass(html: string, label: string) {
+  const links = Array.from(html.matchAll(/<a\s+([^>]*)>([\s\S]*?)<\/a>/g))
+  const match = links.find(([, , content]) => content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() === label)
+  expect(match, `Expected link for ${label}`).toBeDefined()
+
+  const classMatch = match?.[1].match(/class="([^"]*)"/)
+  return classMatch?.[1] || ''
+}
+
+function expectActiveLink(html: string, label: string) {
+  expect(getLinkClass(html, label)).toContain('bg-[var(--mantine-color-brand-light)]')
+}
+
+function expectInactiveLink(html: string, label: string) {
+  expect(getLinkClass(html, label)).not.toContain('bg-[var(--mantine-color-brand-light)]')
+}
+
 describe('MainLayout', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('renders command center navigation grouped by domain', () => {
+    vi.stubGlobal('window', {
+      api: {
+        platform: 'darwin',
+      },
+    })
+
+    const html = renderLayout('/')
+
+    expect(html).toContain('总览')
+    expect(html).toContain('AI 使用')
+    expect(html).toContain('OpenClaw 运维')
+    expect(html).toContain('数据保护')
+    expect(html).toContain('指挥台')
+    expect(html).toContain('配置差异')
+    expect(html).not.toContain('计划')
+  })
+
+  it('only highlights the command center item on the dashboard route', () => {
+    vi.stubGlobal('window', {
+      api: {
+        platform: 'darwin',
+      },
+    })
+
+    const html = renderLayout('/')
+
+    expectActiveLink(html, '指挥台')
+    expectInactiveLink(html, '服务')
+    expectInactiveLink(html, 'Gateway')
+    expectInactiveLink(html, '日志')
+    expectInactiveLink(html, '备份')
+  })
+
+  it('highlights bottom settings without highlighting settings-routed placeholders', () => {
+    vi.stubGlobal('window', {
+      api: {
+        platform: 'darwin',
+      },
+    })
+
+    const html = renderLayout('/settings')
+
+    expectActiveLink(html, '设置')
+    expectInactiveLink(html, '配置差异')
+    expectInactiveLink(html, '恢复')
+  })
+
+  it('highlights channels without highlighting the plugin placeholder', () => {
+    vi.stubGlobal('window', {
+      api: {
+        platform: 'darwin',
+      },
+    })
+
+    const html = renderLayout('/channels')
+
+    expectActiveLink(html, '渠道')
+    expectInactiveLink(html, '插件')
   })
 
   it('keeps settings and the update reminder in the same bottom navigation row with filled primary styling', () => {
@@ -34,24 +135,7 @@ describe('MainLayout', () => {
       },
     })
 
-    const html = renderToStaticMarkup(
-      <MantineProvider>
-        <MemoryRouter initialEntries={['/settings']}>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <UpdateNotificationProvider initialUpdate={createAvailableUpdateStatus()}>
-                  <MainLayout />
-                </UpdateNotificationProvider>
-              }
-            >
-              <Route path="settings" element={<div>content</div>} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
-      </MantineProvider>
-    )
+    const html = renderLayout('/settings', createAvailableUpdateStatus())
 
     expect(html).toContain('设置')
     expect(html).toContain('新版本')
