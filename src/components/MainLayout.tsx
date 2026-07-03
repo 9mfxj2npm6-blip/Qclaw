@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Tooltip } from '@mantine/core'
 import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import logoSrc from '@/assets/logo.png'
 import tooltips from '@/constants/tooltips.json'
 import { useUpdateNotification } from '../contexts/UpdateNotificationContext'
@@ -84,11 +85,49 @@ function getNavItemMeta(id: string) {
 export default function MainLayout() {
   const location = useLocation()
   const { state: updateState, openConfirmDialog } = useUpdateNotification()
+  const [writeProtection, setWriteProtection] = useState({
+    enabled: true,
+    maintenanceMode: false,
+    envOverride: false,
+  })
+
+  useEffect(() => {
+    void window.api?.getOpenClawWriteProtectionStatus?.()
+      .then((status) => {
+        if (status) setWriteProtection(status)
+      })
+      .catch(() => {})
+  }, [])
 
   const isActive = (to: string) => {
     if (to === '/') return location.pathname === '/'
     return location.pathname.startsWith(to)
   }
+
+  const handleToggleMaintenanceMode = async () => {
+    const nextEnabled = !writeProtection.maintenanceMode && !writeProtection.envOverride
+    if (nextEnabled) {
+      const accepted = window.confirm(
+        [
+          '进入维护模式后，Qclaw 将允许模型、Skill、插件、渠道、版本升级等写入操作。',
+          '请只在你明确要修改 OpenClaw 时开启。',
+          '维护模式只对本次运行生效，重启 Qclaw 后会恢复只读保护。',
+          '',
+          '是否进入维护模式？',
+        ].join('\n')
+      )
+      if (!accepted) return
+    }
+
+    const status = await window.api.setOpenClawMaintenanceMode(nextEnabled)
+    setWriteProtection(status)
+  }
+
+  const protectionLabel = writeProtection.envOverride
+    ? '环境变量放行'
+    : writeProtection.maintenanceMode
+      ? '维护模式'
+      : '只读保护'
 
   return (
     <div className="h-screen app-bg-primary app-text-primary flex flex-col">
@@ -142,6 +181,28 @@ export default function MainLayout() {
             ))}
           </div>
           <div className="mt-auto pt-2 border-t app-border">
+            <div className="mb-2 rounded-lg border app-border px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium app-text-secondary">{protectionLabel}</span>
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    writeProtection.enabled ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleToggleMaintenanceMode()}
+                disabled={writeProtection.envOverride}
+                className="mt-2 w-full rounded-md border app-border bg-transparent px-2 py-1.5 text-xs app-text-secondary hover:app-bg-tertiary disabled:opacity-60"
+              >
+                {writeProtection.envOverride
+                  ? '环境变量已放行'
+                  : writeProtection.maintenanceMode
+                    ? '退出维护模式'
+                    : '进入维护模式'}
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               <NavLink
                 to="/settings"

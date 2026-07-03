@@ -1619,6 +1619,16 @@ interface ElectronApi {
   onOpenContactModal: (listener: () => void) => () => void
   onOpenModelsPage: (listener: () => void) => () => void
   getOpenClawPaths: () => Promise<OpenClawPaths>
+  getOpenClawWriteProtectionStatus: () => Promise<{
+    enabled: boolean
+    maintenanceMode: boolean
+    envOverride: boolean
+  }>
+  setOpenClawMaintenanceMode: (enabled: boolean) => Promise<{
+    enabled: boolean
+    maintenanceMode: boolean
+    envOverride: boolean
+  }>
 
   // Environment
   checkNode: () => Promise<NodeCheckResult>

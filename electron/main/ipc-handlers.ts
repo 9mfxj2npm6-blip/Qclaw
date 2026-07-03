@@ -130,7 +130,11 @@ import {
   openQClawUpdateDownloadUrl,
 } from './qclaw-update-service'
 import { checkCombinedUpdate, runCombinedUpdate } from './combined-update-orchestrator'
-import { guardOpenClawMutation } from './openclaw-write-protection'
+import {
+  getOpenClawWriteProtectionStatus,
+  guardOpenClawMutation,
+  setOpenClawMaintenanceMode,
+} from './openclaw-write-protection'
 import { wecomQrGenerate, wecomQrCheckResult } from './wecom-qr'
 import { parseClawHubSearchResults } from './clawhub-search'
 import {
@@ -511,6 +515,10 @@ export function registerIpcHandlers() {
   })
 
   ipcMain.handle('paths:openclaw:get', () => getOpenClawPaths())
+  ipcMain.handle('openclaw:write-protection:status', () => getOpenClawWriteProtectionStatus())
+  ipcMain.handle('openclaw:maintenance-mode:set', (_e, enabled: boolean) =>
+    setOpenClawMaintenanceMode(Boolean(enabled))
+  )
 
   // Environment checks
   ipcMain.handle('env:checkNode', () => checkNode())

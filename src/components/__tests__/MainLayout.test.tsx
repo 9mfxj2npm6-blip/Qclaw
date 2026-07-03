@@ -148,4 +148,22 @@ describe('MainLayout', () => {
       /<button[^>]*bg-\[var\(--mantine-primary-color-filled\)\][^>]*text-\[var\(--mantine-primary-color-contrast\)\][^>]*>新版本<\/button>/
     )
   })
+
+  it('shows readonly protection with an explicit maintenance mode entry', () => {
+    vi.stubGlobal('window', {
+      api: {
+        platform: 'darwin',
+        getOpenClawWriteProtectionStatus: vi.fn(async () => ({
+          enabled: true,
+          maintenanceMode: false,
+          envOverride: false,
+        })),
+      },
+    })
+
+    const html = renderLayout('/')
+
+    expect(html).toContain('只读保护')
+    expect(html).toContain('进入维护模式')
+  })
 })

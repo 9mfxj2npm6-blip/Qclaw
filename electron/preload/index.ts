@@ -30,6 +30,9 @@ export const api = {
   onOpenModelsPage: (listener: () => void) =>
     subscribeToChannel<void>(OPEN_MODELS_PAGE_CHANNEL, () => listener()),
   getOpenClawPaths: () => ipcRenderer.invoke('paths:openclaw:get'),
+  getOpenClawWriteProtectionStatus: () => ipcRenderer.invoke('openclaw:write-protection:status'),
+  setOpenClawMaintenanceMode: (enabled: boolean) =>
+    ipcRenderer.invoke('openclaw:maintenance-mode:set', enabled),
 
   // Environment
   checkNode: () => ipcRenderer.invoke('env:checkNode'),

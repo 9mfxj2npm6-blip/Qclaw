@@ -1,12 +1,38 @@
 export const OPENCLAW_WRITE_PROTECTION_ENV = 'QCLAW_OPENCLAW_WRITE_PROTECTION'
 
 const DISABLED_VALUES = new Set(['0', 'false', 'off', 'disabled', 'allow-writes'])
+let maintenanceModeEnabled = false
+
+export interface OpenClawWriteProtectionStatus {
+  enabled: boolean
+  maintenanceMode: boolean
+  envOverride: boolean
+}
+
+function hasEnvOverride(env: Record<string, string | undefined> = process.env): boolean {
+  const rawValue = String(env[OPENCLAW_WRITE_PROTECTION_ENV] || '').trim().toLowerCase()
+  return DISABLED_VALUES.has(rawValue)
+}
 
 export function isOpenClawWriteProtectionEnabled(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  const rawValue = String(env[OPENCLAW_WRITE_PROTECTION_ENV] || '').trim().toLowerCase()
-  return !DISABLED_VALUES.has(rawValue)
+  return !maintenanceModeEnabled && !hasEnvOverride(env)
+}
+
+export function getOpenClawWriteProtectionStatus(
+  env: Record<string, string | undefined> = process.env
+): OpenClawWriteProtectionStatus {
+  return {
+    enabled: isOpenClawWriteProtectionEnabled(env),
+    maintenanceMode: maintenanceModeEnabled,
+    envOverride: hasEnvOverride(env),
+  }
+}
+
+export function setOpenClawMaintenanceMode(enabled: boolean): OpenClawWriteProtectionStatus {
+  maintenanceModeEnabled = Boolean(enabled)
+  return getOpenClawWriteProtectionStatus()
 }
 
 export function buildOpenClawWriteProtectionBlockedResult(operation: string) {
