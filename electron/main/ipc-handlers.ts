@@ -130,6 +130,7 @@ import {
   openQClawUpdateDownloadUrl,
 } from './qclaw-update-service'
 import { checkCombinedUpdate, runCombinedUpdate } from './combined-update-orchestrator'
+import { guardOpenClawMutation } from './openclaw-write-protection'
 import { wecomQrGenerate, wecomQrCheckResult } from './wecom-qr'
 import { parseClawHubSearchResults } from './clawhub-search'
 import {
@@ -560,28 +561,32 @@ export function registerIpcHandlers() {
 
   // Install
   ipcMain.handle('install:openclaw', () =>
-    withModelCenterCapabilitiesInvalidatedOnSuccess(() => installOpenClaw())
+    guardOpenClawMutation('install:openclaw', () =>
+      withModelCenterCapabilitiesInvalidatedOnSuccess(() => installOpenClaw())
+    )
   )
   ipcMain.handle('openclaw:discover', () => discoverOpenClawInstallations())
   ipcMain.handle('openclaw:latest:check', () => checkOpenClawLatestVersion())
   ipcMain.handle('openclaw:baseline-backup:ensure', (_e, candidate) => ensureBaselineBackup(candidate))
-  ipcMain.handle('openclaw:baseline-backup:skip', (_e, candidate) => skipBaselineBackup(candidate))
+  ipcMain.handle('openclaw:baseline-backup:skip', (_e, candidate) =>
+    guardOpenClawMutation('openclaw:baseline-backup:skip', () => skipBaselineBackup(candidate))
+  )
   ipcMain.handle('openclaw:baseline-backup:get-status', (_e, installFingerprint: string) =>
     getBaselineBackupStatus(installFingerprint)
   )
   ipcMain.handle('openclaw:managed:mark', (_e, installFingerprint: string) =>
-    markManagedOpenClawInstall(installFingerprint)
+    guardOpenClawMutation('openclaw:managed:mark', () => markManagedOpenClawInstall(installFingerprint))
   )
   ipcMain.handle('openclaw:data-guard:get', (_e, candidate) => getDataGuardSummary(candidate))
   ipcMain.handle('openclaw:config:prepare', (_e, candidate) => prepareManagedConfigWrite(candidate))
   ipcMain.handle('openclaw:config:guarded-write', (_e, request, candidate) =>
-    guardedWriteConfig(request, candidate)
+    guardOpenClawMutation('openclaw:config:guarded-write', () => guardedWriteConfig(request, candidate))
   )
   ipcMain.handle('openclaw:config:apply-patch', (_e, request, candidate) =>
-    applyConfigPatchGuarded(request, candidate)
+    guardOpenClawMutation('openclaw:config:apply-patch', () => applyConfigPatchGuarded(request, candidate))
   )
   ipcMain.handle('openclaw:env:guarded-write', (_e, request, candidate) =>
-    guardedWriteEnvFileWithGatewayApply(request, candidate)
+    guardOpenClawMutation('openclaw:env:guarded-write', () => guardedWriteEnvFileWithGatewayApply(request, candidate))
   )
   ipcMain.handle('openclaw:ownership:get', (_e, installFingerprint: string) =>
     getOwnershipDetails(installFingerprint)
@@ -590,14 +595,24 @@ export function registerIpcHandlers() {
     listOwnershipDetailChanges(installFingerprint)
   )
   ipcMain.handle('openclaw:cleanup:preview', (_e, request) => buildOpenClawCleanupPreview(request))
-  ipcMain.handle('openclaw:cleanup:run', (_e, request) => runOpenClawCleanup(request))
-  ipcMain.handle('openclaw:data-cleanup:run', (_e, request) => runOpenClawDataCleanup(request))
+  ipcMain.handle('openclaw:cleanup:run', (_e, request) =>
+    guardOpenClawMutation('openclaw:cleanup:run', () => runOpenClawCleanup(request))
+  )
+  ipcMain.handle('openclaw:data-cleanup:run', (_e, request) =>
+    guardOpenClawMutation('openclaw:data-cleanup:run', () => runOpenClawDataCleanup(request))
+  )
   ipcMain.handle('qclaw:uninstall:preview', (_e, request) => buildOpenClawCleanupPreview(request))
-  ipcMain.handle('qclaw:uninstall:prepare', (_e, request) => prepareQClawUninstall(request))
+  ipcMain.handle('qclaw:uninstall:prepare', (_e, request) =>
+    guardOpenClawMutation('qclaw:uninstall:prepare', () => prepareQClawUninstall(request))
+  )
   ipcMain.handle('openclaw:backup:list', () => listOpenClawBackups())
   ipcMain.handle('openclaw:backup:get-root', () => getOpenClawEffectiveBackupRootInfo())
-  ipcMain.handle('openclaw:backup:delete', (_e, backupId: string) => deleteOpenClawBackup(backupId))
-  ipcMain.handle('openclaw:backup:delete-all', () => deleteAllOpenClawBackups())
+  ipcMain.handle('openclaw:backup:delete', (_e, backupId: string) =>
+    guardOpenClawMutation('openclaw:backup:delete', () => deleteOpenClawBackup(backupId))
+  )
+  ipcMain.handle('openclaw:backup:delete-all', () =>
+    guardOpenClawMutation('openclaw:backup:delete-all', () => deleteAllOpenClawBackups())
+  )
   ipcMain.handle('openclaw:backup:run-manual', () => runOpenClawManualBackup())
   ipcMain.handle('openclaw:backup:open-dir', async (_e, targetPath?: string) => {
     const resolvedPath = await resolveOpenClawBackupDirectoryToOpen(targetPath)
@@ -614,16 +629,24 @@ export function registerIpcHandlers() {
     const fs = await import('fs')
     const workspacePath = path.join(os.homedir(), '.openclaw')
     if (!fs.existsSync(workspacePath)) {
-      fs.mkdirSync(workspacePath, { recursive: true })
+      const blocked = guardOpenClawMutation('openclaw:open-workspace:create-dir', () => {
+        fs.mkdirSync(workspacePath, { recursive: true })
+        return null
+      })
+      if (blocked !== null) return blocked
     }
     const error = await shell.openPath(workspacePath)
     return { ok: !error, path: workspacePath, error: error || '' }
   })
   ipcMain.handle('openclaw:restore:preview', (_e, backupId: string) => previewOpenClawRestore(backupId))
-  ipcMain.handle('openclaw:restore:run', (_e, backupId: string, scope) => runOpenClawRestore(backupId, scope))
+  ipcMain.handle('openclaw:restore:run', (_e, backupId: string, scope) =>
+    guardOpenClawMutation('openclaw:restore:run', () => runOpenClawRestore(backupId, scope))
+  )
   ipcMain.handle('openclaw:upgrade:check', () => checkOpenClawUpgrade())
   ipcMain.handle('openclaw:upgrade:run', () =>
-    withModelCenterCapabilitiesInvalidatedOnSuccess(() => runOpenClawUpgrade())
+    guardOpenClawMutation('openclaw:upgrade:run', () =>
+      withModelCenterCapabilitiesInvalidatedOnSuccess(() => runOpenClawUpgrade())
+    )
   )
   ipcMain.handle('qclaw:update:status', () => getQClawUpdateStatus())
   ipcMain.handle('qclaw:update:check', () => checkQClawUpdate())
@@ -633,11 +656,15 @@ export function registerIpcHandlers() {
   ipcMain.handle('qclaw:update:open-download-url', () => openQClawUpdateDownloadUrl())
   ipcMain.handle('combined:update:check', () => checkCombinedUpdate())
   ipcMain.handle('combined:update:run', () =>
-    withModelCenterCapabilitiesInvalidatedOnSuccess(() => runCombinedUpdate())
+    guardOpenClawMutation('combined:update:run', () =>
+      withModelCenterCapabilitiesInvalidatedOnSuccess(() => runCombinedUpdate())
+    )
   )
 
   // Onboard
-  ipcMain.handle('setup:onboard', (_e, opts) => runOnboard(opts))
+  ipcMain.handle('setup:onboard', (_e, opts) =>
+    guardOpenClawMutation('setup:onboard', () => runOnboard(opts))
+  )
 
   // Gateway
   ipcMain.handle('gateway:health', () => gatewayHealth())
@@ -685,14 +712,19 @@ export function registerIpcHandlers() {
   ipcMain.handle('env:read', () => readEnvFile())
 
   // Doctor
-  ipcMain.handle('doctor:run', (_e, options?: { fix?: boolean; nonInteractive?: boolean }) => runDoctor(options))
+  ipcMain.handle('doctor:run', (_e, options?: { fix?: boolean; nonInteractive?: boolean }) => {
+    if (options?.fix) {
+      return guardOpenClawMutation('doctor:run:fix', () => runDoctor(options))
+    }
+    return runDoctor(options)
+  })
 
   // Pairing
   ipcMain.handle('pairing:approve', (_e, channel: string, code: string, accountId?: string) =>
-    pairingApprove(channel, code, accountId)
+    guardOpenClawMutation('pairing:approve', () => pairingApprove(channel, code, accountId))
   )
   ipcMain.handle('pairing:addAllowFrom', (_e, channel: string, senderId: string, accountId?: string) =>
-    pairingAddAllowFrom(channel, senderId, accountId)
+    guardOpenClawMutation('pairing:addAllowFrom', () => pairingAddAllowFrom(channel, senderId, accountId))
   )
   ipcMain.handle('pairing:allowFromUsers', (_e, channel: string, accountId?: string) =>
     pairingAllowFromUsers(channel, accountId)
@@ -701,34 +733,46 @@ export function registerIpcHandlers() {
   ipcMain.handle('feishu:runtime-status', () => getFeishuBotRuntimeStatuses())
   ipcMain.handle('pairing:feishuAccounts', (_e, accountId?: string) => pairingFeishuAccounts(accountId))
   ipcMain.handle('pairing:removeAllowFrom', (_e, channel: string, senderId: string, accountId?: string) =>
-    pairingRemoveAllowFrom(channel, senderId, accountId)
+    guardOpenClawMutation('pairing:removeAllowFrom', () => pairingRemoveAllowFrom(channel, senderId, accountId))
   )
 
   // Plugins
-  ipcMain.handle('plugins:install', (_e, name: string, expectedPluginIds?: string[]) => installPlugin(name, expectedPluginIds))
-  ipcMain.handle('plugins:installNpx', (_e, url: string, expectedPluginIds?: string[]) => installPluginNpx(url, expectedPluginIds))
+  ipcMain.handle('plugins:install', (_e, name: string, expectedPluginIds?: string[]) =>
+    guardOpenClawMutation('plugins:install', () => installPlugin(name, expectedPluginIds))
+  )
+  ipcMain.handle('plugins:installNpx', (_e, url: string, expectedPluginIds?: string[]) =>
+    guardOpenClawMutation('plugins:installNpx', () => installPluginNpx(url, expectedPluginIds))
+  )
   ipcMain.handle('plugins:repair-incompatible', (_e, options?: RepairIncompatibleExtensionPluginsOptions) =>
-    repairIncompatibleExtensionPlugins(options || {})
+    guardOpenClawMutation('plugins:repair-incompatible', () => repairIncompatibleExtensionPlugins(options || {}))
   )
   ipcMain.handle('plugins:installed-on-disk', (_e, pluginId: string) => isPluginInstalledOnDisk(pluginId))
-  ipcMain.handle('plugins:uninstall', (_e, name: string) => uninstallPlugin(name))
+  ipcMain.handle('plugins:uninstall', (_e, name: string) =>
+    guardOpenClawMutation('plugins:uninstall', () => uninstallPlugin(name))
+  )
   ipcMain.handle('plugins:feishu-installed', () => isFeishuOfficialPluginInstalledOnDisk())
   ipcMain.handle('plugins:feishu-state', () => getFeishuOfficialPluginState())
-  ipcMain.handle('plugins:feishu-ensure-ready', () => ensureFeishuOfficialPluginReady())
+  ipcMain.handle('plugins:feishu-ensure-ready', () =>
+    guardOpenClawMutation('plugins:feishu-ensure-ready', () => ensureFeishuOfficialPluginReady())
+  )
   ipcMain.handle('feishu:credentials:validate', (_e, appId: string, appSecret: string, domain?: string) =>
     validateFeishuCredentials(appId, appSecret, domain)
   )
   ipcMain.handle('feishu:installer:state:get', () => getFeishuInstallerSessionSnapshot())
   ipcMain.handle('feishu:installer:start', (event) =>
-    startFeishuInstallerSession((payload) => {
-      event.sender.send('feishu:installer:event', payload)
-    })
+    guardOpenClawMutation('feishu:installer:start', () =>
+      startFeishuInstallerSession((payload) => {
+        event.sender.send('feishu:installer:event', payload)
+      })
+    )
   )
   ipcMain.handle('feishu:installer:input', (_e, sessionId: string, input: string) =>
-    writeFeishuInstallerSessionInput(sessionId, input)
+    guardOpenClawMutation('feishu:installer:input', () => writeFeishuInstallerSessionInput(sessionId, input))
   )
   ipcMain.handle('feishu:installer:prompt:answer', (_e, sessionId: string, promptId: string, resolution: 'confirm' | 'cancel') =>
-    answerFeishuInstallerSessionPrompt(sessionId, promptId, resolution)
+    guardOpenClawMutation('feishu:installer:prompt:answer', () =>
+      answerFeishuInstallerSessionPrompt(sessionId, promptId, resolution)
+    )
   )
   ipcMain.handle('feishu:installer:stop', () => stopFeishuInstallerSession())
   ipcMain.handle('feishu:diagnostics:listen', (_e, accountId?: string, timeoutMs?: number, requestId?: string) =>
@@ -742,61 +786,77 @@ export function registerIpcHandlers() {
   )
   ipcMain.handle('weixin:installer:state:get', () => getWeixinInstallerSessionSnapshot())
   ipcMain.handle('weixin:installer:start', (event) =>
-    startWeixinInstallerSession((payload) => {
-      event.sender.send('weixin:installer:event', payload)
-    })
+    guardOpenClawMutation('weixin:installer:start', () =>
+      startWeixinInstallerSession((payload) => {
+        event.sender.send('weixin:installer:event', payload)
+      })
+    )
   )
   ipcMain.handle('weixin:installer:stop', () => stopWeixinInstallerSession())
   ipcMain.handle('weixin:accounts:list', () => listWeixinAccountState())
-  ipcMain.handle('weixin:accounts:remove', (_e, accountId: string) => removeWeixinAccountState(accountId))
+  ipcMain.handle('weixin:accounts:remove', (_e, accountId: string) =>
+    guardOpenClawMutation('weixin:accounts:remove', () => removeWeixinAccountState(accountId))
+  )
 
   // Repair progress (stub — real data wired in a later stage)
   ipcMain.handle('managed-plugin:repair:active', () => [])
 
   // Channels
-  ipcMain.handle('channels:add', (_e, channel: string, token: string) => channelsAdd(channel, token))
+  ipcMain.handle('channels:add', (_e, channel: string, token: string) =>
+    guardOpenClawMutation('channels:add', () => channelsAdd(channel, token))
+  )
   ipcMain.handle('channels:dingtalk:setup-official', (_e, formData: Record<string, string>) =>
-    setupDingtalkOfficialChannel(formData)
+    guardOpenClawMutation('channels:dingtalk:setup-official', () => setupDingtalkOfficialChannel(formData))
   )
   ipcMain.handle('channels:official:status', (_e, channelId: 'feishu' | 'dingtalk') =>
     getOfficialChannelStatus(channelId)
   )
   ipcMain.handle('channels:official:repair', (_e, channelId: 'feishu' | 'dingtalk') =>
-    repairOfficialChannel(channelId)
+    guardOpenClawMutation('channels:official:repair', () => repairOfficialChannel(channelId))
   )
   ipcMain.handle('channels:managed:status', (_e, channelId: string) =>
     getManagedChannelPluginStatus(channelId)
   )
   ipcMain.handle('channels:managed:prepare', (_e, channelId: string) =>
-    prepareManagedChannelPluginForSetup(channelId)
+    guardOpenClawMutation('channels:managed:prepare', () => prepareManagedChannelPluginForSetup(channelId))
   )
   ipcMain.handle('channels:managed:repair', (_e, channelId: string) =>
-    repairManagedChannelPlugin(channelId)
+    guardOpenClawMutation('channels:managed:repair', () => repairManagedChannelPlugin(channelId))
   )
 
   // Dashboard
   ipcMain.handle('dashboard:open', () => openDashboard())
   ipcMain.handle('chat:availability:get', () => getDashboardChatAvailability())
   ipcMain.handle('chat:sessions:list', () => listChatSessions())
-  ipcMain.handle('chat:session:create', () => createChatSession())
-  ipcMain.handle('chat:session:create:local', () => createLocalChatSession())
+  ipcMain.handle('chat:session:create', () =>
+    guardOpenClawMutation('chat:session:create', () => createChatSession())
+  )
+  ipcMain.handle('chat:session:create:local', () =>
+    guardOpenClawMutation('chat:session:create:local', () => createLocalChatSession())
+  )
   ipcMain.handle('chat:capabilities:get', () => getChatCapabilitySnapshot())
   ipcMain.handle('chat:debug-snapshot:get', (_e, sessionId: string) => getChatSessionDebugSnapshot(sessionId))
   ipcMain.handle('chat:trace:list', (_e, limit?: number) => listChatTraceEntries(limit))
-  ipcMain.handle('chat:session:model:patch', (_e, request) => patchChatSessionModel(request))
+  ipcMain.handle('chat:session:model:patch', (_e, request) =>
+    guardOpenClawMutation('chat:session:model:patch', () => patchChatSessionModel(request))
+  )
   ipcMain.handle('chat:transcript:get', (_e, sessionId: string) => getChatTranscript(sessionId))
   ipcMain.handle('chat:send', (event, request) =>
-    sendChatMessage(request, {
-      emit: (payload) => {
-        event.sender.send('chat:stream', payload)
-      },
-    })
+    guardOpenClawMutation('chat:send', () =>
+      sendChatMessage(request, {
+        emit: (payload) => {
+          event.sender.send('chat:stream', payload)
+        },
+      })
+    )
   )
   ipcMain.handle('chat:cancel', () => cancelActiveCommand('chat'))
-  ipcMain.handle('chat:transcript:clear', (_e, sessionId: string) => clearChatTranscript(sessionId))
+  ipcMain.handle('chat:transcript:clear', (_e, sessionId: string) =>
+    guardOpenClawMutation('chat:transcript:clear', () => clearChatTranscript(sessionId))
+  )
 
   // Uninstall
-  ipcMain.handle('uninstall:all', () => uninstallAll())
+  ipcMain.handle('uninstall:all', () => guardOpenClawMutation('uninstall:all', () => uninstallAll()))
 
   // OAuth
   ipcMain.handle('check-oauth-complete', (_e, providerKey: string) => checkOAuthComplete(providerKey))
@@ -806,7 +866,7 @@ export function registerIpcHandlers() {
     inspectOAuthDependencyForAuthChoice(authChoice)
   )
   ipcMain.handle('oauth:dependency:install', (_e, request: InstallOAuthExternalDependencyRequest) =>
-    installOAuthExternalDependency(request)
+    guardOpenClawMutation('oauth:dependency:install', () => installOAuthExternalDependency(request))
   )
 
   // Models center
@@ -817,16 +877,22 @@ export function registerIpcHandlers() {
     getOpenClawUpstreamModelState(options || {})
   )
   ipcMain.handle('models:verification:sync', (_e, input?: { statusData?: Record<string, any> | null }) =>
-    syncModelVerificationState(input || {})
+    guardOpenClawMutation('models:verification:sync', () => syncModelVerificationState(input || {}))
   )
   ipcMain.handle('models:verification:record', (_e, input: {
     modelKey: string
     verificationState: 'verified-available' | 'verified-unavailable'
-  }) => recordModelVerification(input))
-  ipcMain.handle('models:upstream-write:apply', (_e, request) => applyModelConfigViaUpstreamControlUi(request))
+  }) => guardOpenClawMutation('models:verification:record', () => recordModelVerification(input)))
+  ipcMain.handle('models:upstream-write:apply', (_e, request) =>
+    guardOpenClawMutation('models:upstream-write:apply', () => applyModelConfigViaUpstreamControlUi(request))
+  )
   ipcMain.handle('models:provider:validate', (_e, input: ValidateProviderCredentialInput) => validateProviderCredential(input))
-  ipcMain.handle('models:config:apply', (_e, action: ModelConfigAction) => applyModelConfigAction(action))
-  ipcMain.handle('models:auth:run', (_e, action: AuthAction) => runAuthAction(action))
+  ipcMain.handle('models:config:apply', (_e, action: ModelConfigAction) =>
+    guardOpenClawMutation('models:config:apply', () => applyModelConfigAction(action))
+  )
+  ipcMain.handle('models:auth:run', (_e, action: AuthAction) =>
+    guardOpenClawMutation('models:auth:run', () => runAuthAction(action))
+  )
   ipcMain.handle('model-auth:diagnostic:append', async (_e, entry: Record<string, any>) => {
     await appendModelAuthDiagnosticLog({
       source: String(entry?.source || '').trim(),
@@ -842,11 +908,13 @@ export function registerIpcHandlers() {
     return true
   })
   ipcMain.handle('models:oauth:start', (event, request: StartModelOAuthRequest) =>
-    startModelOAuthFlow(request, {
-      emit: (channel, payload) => {
-        event.sender.send(channel, payload)
-      },
-    })
+    guardOpenClawMutation('models:oauth:start', () =>
+      startModelOAuthFlow(request, {
+        emit: (channel, payload) => {
+          event.sender.send(channel, payload)
+        },
+      })
+    )
   )
   ipcMain.handle('models:oauth:cancel', () => cancelActiveCommand('oauth'))
   ipcMain.handle(
@@ -882,19 +950,19 @@ export function registerIpcHandlers() {
     scanLocalModels(input)
   )
   ipcMain.handle('local-models:write-env', (_e, updates: Record<string, string | undefined>) =>
-    writeEnvFile(updates)
+    guardOpenClawMutation('local-models:write-env', () => writeEnvFile(updates))
   )
   ipcMain.handle('local-models:ensure-auth', (_e, input: EnsureLocalAuthProfileInput) =>
-    ensureLocalAuthProfile(input)
+    guardOpenClawMutation('local-models:ensure-auth', () => ensureLocalAuthProfile(input))
   )
   ipcMain.handle('local-models:clear-auth-profiles', (_e, input: ClearModelAuthProfilesInput) =>
-    clearModelAuthProfilesByProvider(input)
+    guardOpenClawMutation('local-models:clear-auth-profiles', () => clearModelAuthProfilesByProvider(input))
   )
   ipcMain.handle('local-models:inspect-auth-profiles', (_e, input: InspectModelAuthProfilesInput) =>
     inspectModelAuthProfilesByProvider(input)
   )
   ipcMain.handle('local-models:clear-external-auth', (_e, input: ClearExternalProviderAuthInput) =>
-    clearExternalProviderAuth(input)
+    guardOpenClawMutation('local-models:clear-external-auth', () => clearExternalProviderAuth(input))
   )
 
   // WeChat Work QR binding
@@ -936,14 +1004,16 @@ export function registerIpcHandlers() {
         enabled?: boolean
         apiKey?: string
       }
-    ) => updateSkillConfigEntry(input)
+    ) => guardOpenClawMutation('skills:update', () => updateSkillConfigEntry(input))
   )
 
   ipcMain.handle('skills:toggle', async (_e, name: string, enabled: boolean) => {
-    return updateSkillConfigEntry({
-      skillKey: name,
-      enabled,
-    })
+    return guardOpenClawMutation('skills:toggle', () =>
+      updateSkillConfigEntry({
+        skillKey: name,
+        enabled,
+      })
+    )
   })
 
   const getOpenClawSkillLocations = async () => {
@@ -952,6 +1022,9 @@ export function registerIpcHandlers() {
   }
 
   ipcMain.handle('skills:uninstall', async (_e, name: string) => {
+    const blocked = guardOpenClawMutation('skills:uninstall', () => null)
+    if (blocked !== null) return blocked
+
     const normalizedName = String(name || '').trim()
     if (!normalizedName) {
       return {
@@ -1021,6 +1094,9 @@ export function registerIpcHandlers() {
   })
 
   ipcMain.handle('skills:install', async (_e, name: string) => {
+    const blocked = guardOpenClawMutation('skills:install', () => null)
+    if (blocked !== null) return blocked
+
     return withExclusiveSkillMutation('install', name, async () => installSkillWithOfficialFallback(name))
   })
 
@@ -1036,6 +1112,9 @@ export function registerIpcHandlers() {
   })
 
   ipcMain.handle('clawhub:install', async (_e, slug: string) => {
+    const blocked = guardOpenClawMutation('clawhub:install', () => null)
+    if (blocked !== null) return blocked
+
     return withExclusiveSkillMutation('install', slug, async () => installSkillWithOfficialFallback(slug))
   })
 
@@ -1050,6 +1129,9 @@ export function registerIpcHandlers() {
   }
 
   ipcMain.handle('deps:installBin', async (_e, bin: string) => {
+    const blocked = guardOpenClawMutation('deps:installBin', () => null)
+    if (blocked !== null) return blocked
+
     return withManagedOperationLock('runtime-install', async () => {
       const safePackage = normalizeSafeInstallPackageName(bin)
       if (!safePackage) {
@@ -1074,6 +1156,9 @@ export function registerIpcHandlers() {
 
   // 按 skill 维度安装依赖：npx → brew → 提示用户
   ipcMain.handle('deps:installSkillDeps', async (event, skillName: string) => {
+    const blocked = guardOpenClawMutation('deps:installSkillDeps', () => null)
+    if (blocked !== null) return blocked
+
     return withManagedOperationLock('runtime-install', async () => {
       const log = (msg: string) => event.sender.send('deps:install:log', msg)
 
@@ -1201,6 +1286,9 @@ export function registerIpcHandlers() {
   })
 
   ipcMain.handle('deps:installBrew', async () => {
+    const blocked = guardOpenClawMutation('deps:installBrew', () => null)
+    if (blocked !== null) return blocked
+
     // 先检查是否已安装（包括 /opt/homebrew/bin/brew）
     const checkResult = await runShell('brew', ['--version'], 10_000, 'env-setup')
     if (checkResult.ok) return checkResult
