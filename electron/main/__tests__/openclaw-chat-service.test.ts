@@ -1821,6 +1821,90 @@ describe('openclaw chat service', () => {
     ])
   })
 
+  it('creates a local fallback shell instead of failing an external-key send when gateway ensure fails', async () => {
+    const discoverOpenClaw = createDiscovery('fingerprint-external-key-local-fallback')
+    const capturedCommands: string[][] = []
+
+    const result = await sendChatMessage(
+      {
+        sessionId: 'remote-channel-session',
+        text: '维护模式里也要能继续聊',
+      },
+      {
+        discoverOpenClaw,
+        readModelStatus: async () => createModelStatus('openai/gpt-5.1-codex'),
+        runCommand: async () => ({
+          ok: true,
+          stdout: JSON.stringify({
+            sessions: [
+              {
+                sessionId: 'remote-channel-session',
+                sessionKey: 'agent:main:feishu:account-1:direct:peer-1',
+                agentId: 'main',
+                model: 'openai/gpt-5.1-codex',
+                updatedAt: 9_000,
+                kind: 'direct',
+              },
+            ],
+          }),
+          stderr: '',
+          code: 0,
+        }),
+        ensureGateway: async () => ({
+          ok: false,
+          stdout: '',
+          stderr: 'gateway offline',
+          code: 1,
+          running: false,
+        }),
+        runStreamingCommand: async (args) => {
+          capturedCommands.push(args)
+          return {
+            ok: true,
+            stdout: JSON.stringify({
+              response: {
+                text: '已切到本地安全会话',
+              },
+              model: 'openai/gpt-5.1-codex',
+            }),
+            stderr: '',
+            code: 0,
+          }
+        },
+      }
+    )
+
+    expect(result.ok, JSON.stringify(result)).toBe(true)
+    expect(result.sessionId).not.toBe('remote-channel-session')
+    expect(capturedCommands[0][0]).toBe('agent')
+    expect(capturedCommands[0][3]).toBe(result.sessionId)
+
+    const remoteTranscript = await getChatTranscript('remote-channel-session', {
+      discoverOpenClaw,
+      runCommand: async () => ({
+        ok: true,
+        stdout: JSON.stringify({ sessions: [] }),
+        stderr: '',
+        code: 0,
+      }),
+    })
+    expect(remoteTranscript.messages).toEqual([])
+
+    const localTranscript = await getChatTranscript(result.sessionId, {
+      discoverOpenClaw,
+      runCommand: async () => ({
+        ok: true,
+        stdout: JSON.stringify({ sessions: [] }),
+        stderr: '',
+        code: 0,
+      }),
+    })
+    expect(localTranscript.messages.map((message) => message.text)).toEqual([
+      '维护模式里也要能继续聊',
+      '已切到本地安全会话',
+    ])
+  })
+
   it('forks a legacy local session even when its model matches the latest default model', async () => {
     const discoverOpenClaw = createDiscovery('fingerprint-preflight-reuse')
     const capturedCommands: string[][] = []

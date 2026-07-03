@@ -836,12 +836,8 @@ export function registerIpcHandlers() {
   ipcMain.handle('dashboard:open', () => openDashboard())
   ipcMain.handle('chat:availability:get', () => getDashboardChatAvailability())
   ipcMain.handle('chat:sessions:list', () => listChatSessions())
-  ipcMain.handle('chat:session:create', () =>
-    guardOpenClawMutation('chat:session:create', () => createChatSession())
-  )
-  ipcMain.handle('chat:session:create:local', () =>
-    guardOpenClawMutation('chat:session:create:local', () => createLocalChatSession())
-  )
+  ipcMain.handle('chat:session:create', () => createChatSession())
+  ipcMain.handle('chat:session:create:local', () => createLocalChatSession())
   ipcMain.handle('chat:capabilities:get', () => getChatCapabilitySnapshot())
   ipcMain.handle('chat:debug-snapshot:get', (_e, sessionId: string) => getChatSessionDebugSnapshot(sessionId))
   ipcMain.handle('chat:trace:list', (_e, limit?: number) => listChatTraceEntries(limit))
@@ -850,13 +846,11 @@ export function registerIpcHandlers() {
   )
   ipcMain.handle('chat:transcript:get', (_e, sessionId: string) => getChatTranscript(sessionId))
   ipcMain.handle('chat:send', (event, request) =>
-    guardOpenClawMutation('chat:send', () =>
-      sendChatMessage(request, {
-        emit: (payload) => {
-          event.sender.send('chat:stream', payload)
-        },
-      })
-    )
+    sendChatMessage(request, {
+      emit: (payload) => {
+        event.sender.send('chat:stream', payload)
+      },
+    })
   )
   ipcMain.handle('chat:cancel', () => cancelActiveCommand('chat'))
   ipcMain.handle('chat:transcript:clear', (_e, sessionId: string) =>
