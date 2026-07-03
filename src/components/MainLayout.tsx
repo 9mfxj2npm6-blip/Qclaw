@@ -1,13 +1,21 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Tooltip } from '@mantine/core'
+import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import logoSrc from '@/assets/logo.png'
 import tooltips from '@/constants/tooltips.json'
 import { useUpdateNotification } from '../contexts/UpdateNotificationContext'
+import { COMMAND_CENTER_NAV_GROUPS } from '../shared/command-center-state'
 
-const NAV_ITEMS = [
-  {
+interface NavItemMeta {
+  to: string
+  tooltip?: string
+  icon?: ReactNode
+}
+
+const NAV_ITEM_META: Record<string, NavItemMeta> = {
+  'command-center': {
     to: '/',
-    label: '面板',
     tooltip: tooltips.layout.navigation.dashboardExplain,
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -15,9 +23,8 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
+  chat: {
     to: '/chat',
-    label: '对话',
     tooltip: tooltips.layout.navigation.chatExplain,
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -25,9 +32,8 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
+  channels: {
     to: '/channels',
-    label: '消息渠道',
     tooltip: tooltips.layout.navigation.channelsExplain,
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -35,9 +41,17 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
+  plugins: {
+    to: '/channels',
+    tooltip: tooltips.layout.navigation.channelsExplain,
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0" />
+      </svg>
+    ),
+  },
+  models: {
     to: '/models',
-    label: 'AI 模型',
     tooltip: tooltips.layout.navigation.modelsExplain,
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -45,9 +59,8 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
+  skills: {
     to: '/skills',
-    label: 'Skills',
     tooltip: tooltips.layout.navigation.skillsExplain,
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -55,16 +68,66 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-]
+  service: { to: '/' },
+  gateway: { to: '/' },
+  logs: { to: '/' },
+  backup: { to: '/' },
+  'config-diff': { to: '/settings' },
+  restore: { to: '/settings' },
+}
+
+const NON_HIGHLIGHT_NAV_ITEM_IDS = new Set(['service', 'gateway', 'plugins', 'logs', 'backup', 'config-diff', 'restore'])
+
+function getNavItemMeta(id: string) {
+  return NAV_ITEM_META[id] ?? { to: '/' }
+}
 
 export default function MainLayout() {
   const location = useLocation()
   const { state: updateState, openConfirmDialog } = useUpdateNotification()
+  const [writeProtection, setWriteProtection] = useState({
+    enabled: true,
+    maintenanceMode: false,
+    envOverride: false,
+  })
+
+  useEffect(() => {
+    void window.api?.getOpenClawWriteProtectionStatus?.()
+      .then((status) => {
+        if (status) setWriteProtection(status)
+      })
+      .catch(() => {})
+  }, [])
 
   const isActive = (to: string) => {
     if (to === '/') return location.pathname === '/'
     return location.pathname.startsWith(to)
   }
+
+  const handleToggleMaintenanceMode = async () => {
+    const nextEnabled = !writeProtection.maintenanceMode && !writeProtection.envOverride
+    if (nextEnabled) {
+      const accepted = window.confirm(
+        [
+          '进入维护模式后，Qclaw 将允许模型、Skill、插件、渠道、版本升级等写入操作。',
+          '请只在你明确要修改 OpenClaw 时开启。',
+          '维护模式只对本次运行生效，重启 Qclaw 后会恢复只读保护。',
+          '',
+          '是否进入维护模式？',
+        ].join('\n')
+      )
+      if (!accepted) return
+    }
+
+    const status = await window.api.setOpenClawMaintenanceMode(nextEnabled)
+    setWriteProtection(status)
+  }
+
+  const protectionLabel = writeProtection.envOverride
+    ? '环境变量放行'
+    : writeProtection.maintenanceMode
+      ? '维护模式'
+      : '只读保护'
 
   return (
     <div className="h-screen app-bg-primary app-text-primary flex flex-col">
@@ -80,33 +143,66 @@ export default function MainLayout() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
         <nav className="w-[160px] flex-shrink-0 border-r app-border flex flex-col py-2 px-2">
-          <div className="space-y-0.5 flex-1">
-            {NAV_ITEMS.map((item) => (
-              <Tooltip
-                key={item.to}
-                label={item.tooltip || item.label}
-                position="right"
-                withArrow
-                multiline
-                maw={260}
-                disabled={!item.tooltip}
-              >
-                <NavLink
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm no-underline transition-colors ${
-                    isActive(item.to)
-                      ? 'bg-[var(--mantine-color-brand-light)] text-[var(--mantine-color-brand-light-color)]'
-                      : 'app-text-muted hover:app-text-secondary hover:app-bg-tertiary'
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </NavLink>
-              </Tooltip>
+          <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+            {COMMAND_CENTER_NAV_GROUPS.filter((group) => group.id !== 'system').map((group) => (
+              <section key={group.id} className="space-y-1">
+                <div className="px-3 text-[11px] font-semibold uppercase tracking-normal app-text-muted">
+                  {group.label}
+                </div>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const meta = getNavItemMeta(item.id)
+                    const active = !NON_HIGHLIGHT_NAV_ITEM_IDS.has(item.id) && isActive(meta.to)
+                    const className = `flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-sm no-underline transition-colors ${
+                      active
+                        ? 'bg-[var(--mantine-color-brand-light)] text-[var(--mantine-color-brand-light-color)]'
+                        : 'app-text-muted hover:app-text-secondary hover:app-bg-tertiary'
+                    }`
+
+                    return (
+                      <Tooltip
+                        key={item.id}
+                        label={meta.tooltip || item.label}
+                        position="right"
+                        withArrow
+                        multiline
+                        maw={260}
+                        disabled={!meta.tooltip}
+                      >
+                        <Link to={meta.to} className={className}>
+                          {meta.icon || <span className="w-4 h-4 flex-shrink-0" />}
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        </Link>
+                      </Tooltip>
+                    )
+                  })}
+                </div>
+              </section>
             ))}
           </div>
           <div className="mt-auto pt-2 border-t app-border">
+            <div className="mb-2 rounded-lg border app-border px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium app-text-secondary">{protectionLabel}</span>
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    writeProtection.enabled ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleToggleMaintenanceMode()}
+                disabled={writeProtection.envOverride}
+                className="mt-2 w-full rounded-md border app-border bg-transparent px-2 py-1.5 text-xs app-text-secondary hover:app-bg-tertiary disabled:opacity-60"
+              >
+                {writeProtection.envOverride
+                  ? '环境变量已放行'
+                  : writeProtection.maintenanceMode
+                    ? '退出维护模式'
+                    : '进入维护模式'}
+              </button>
+            </div>
             <div className="flex items-center gap-2">
               <NavLink
                 to="/settings"

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.qclawai.qclaw",
+  "asar": true,
+  "forceCodeSigning": false,
+  "directories": {
+    "app": ".electron-builder/app",
+    "output": "release/local-${env.QCLAW_DISPLAY_VERSION}"
+  },
+  "files": [
+    "dist-electron",
+    "dist"
+  ],
+  "extraResources": [
+    {
+      "from": "LICENSE",
+      "to": "LICENSE"
+    },
+    {
+      "from": "NOTICE",
+      "to": "NOTICE"
+    },
+    {
+      "from": "src/assets/logo.png",
+      "to": "app-icon.png"
+    }
+  ],
+  "mac": {
+    "icon": "build/icon.icns",
+    "category": "public.app-category.developer-tools",
+    "artifactName": "Qclaw-Lite_${env.QCLAW_DISPLAY_VERSION}-${arch}.${ext}",
+    "identity": null,
+    "hardenedRuntime": false,
+    "gatekeeperAssess": false,
+    "strictVerify": false,
+    "target": [
+      "dir"
+    ]
+  },
+  "publish": {
+    "provider": "generic",
+    "channel": "latest",
+    "url": "https://example.invalid/qclaw-lite/updates/latest"
+  }
+}

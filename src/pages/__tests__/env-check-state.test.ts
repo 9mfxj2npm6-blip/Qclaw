@@ -367,7 +367,63 @@ describe('createEnvCheckRestartState', () => {
     expect(gateState.manualHint).toContain('2026.3.24')
   })
 
-  it('builds a clear consent message before automatic openclaw correction runs', () => {
+  it('maps self-healable unsupported versions into read-only compatibility instead of auto correction', () => {
+    const gateState = buildOpenClawGateState(
+      {
+        status: 'installed',
+        candidates: [
+          {
+            candidateId: 'candidate-1',
+            binaryPath: '/usr/local/bin/openclaw',
+            resolvedBinaryPath: '/usr/local/lib/node_modules/openclaw/openclaw.mjs',
+            packageRoot: '/usr/local/lib/node_modules/openclaw',
+            version: '2026.6.11',
+            installSource: 'npm-global',
+            isPathActive: true,
+            configPath: '/Users/test/.openclaw/openclaw.json',
+            stateRoot: '/Users/test/.openclaw',
+            displayConfigPath: '~/.openclaw/openclaw.json',
+            displayStateRoot: '~/.openclaw',
+            ownershipState: 'external-preexisting',
+            installFingerprint: 'fingerprint-1',
+            baselineBackup: null,
+            baselineBackupBypass: null,
+          },
+        ],
+        activeCandidateId: 'candidate-1',
+        hasMultipleCandidates: false,
+        historyDataCandidates: [],
+        errors: [],
+        warnings: [],
+        defaultBackupDirectory: '~/Documents/Qclaw Lite Backups',
+      },
+      {
+        ok: false,
+        activeCandidate: null,
+        currentVersion: '2026.6.11',
+        targetVersion: '2026.3.24',
+        latestCheck: null,
+        policyState: 'above_max',
+        enforcement: 'auto_correct',
+        targetAction: 'downgrade',
+        blocksContinue: true,
+        canSelfHeal: true,
+        canAutoUpgrade: true,
+        upToDate: false,
+        gatewayRunning: false,
+        warnings: [],
+      }
+    )
+
+    expect(gateState.canUpgrade).toBe(false)
+    expect(gateState.canAutoCorrect).toBe(false)
+    expect(gateState.blocksContinue).toBe(false)
+    expect(gateState.statusLabel).toBe('高版本只读兼容')
+    expect(gateState.message).toContain('只读保护模式继续')
+    expect(gateState.message).toContain('不会自动回退')
+  })
+
+  it('builds a clear read-only protection message for unsupported openclaw versions', () => {
     const message = buildOpenClawAutoCorrectionConsentMessage({
       activeCandidate: {
         candidateId: 'candidate-1',
@@ -406,8 +462,8 @@ describe('createEnvCheckRestartState', () => {
 
     expect(message).toContain('当前版本：2026.3.28')
     expect(message).toContain('目标版本：2026.3.24')
-    expect(message).toContain('自动回退 OpenClaw')
-    expect(message).toContain('Qclaw 将立即退出')
+    expect(message).toContain('不会自动回退 OpenClaw')
+    expect(message).toContain('只读保护模式')
   })
 
   it('keeps supported custom installs non-blocking while requiring manual upgrade outside the app', () => {

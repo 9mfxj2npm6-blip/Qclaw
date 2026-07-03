@@ -3414,11 +3414,11 @@ export async function sendChatMessage(
     localSessionState,
     shouldForkVisibleConversation,
   })
-  const sessionId = transport.conversationId
-  const transportSessionId = transport.transportSessionId
+  let sessionId = transport.conversationId
+  let transportSessionId = transport.transportSessionId
   const shouldSeedTransport =
     transport.shouldSeedTransport && Boolean(localSessionState) && !continueWithExternalSessionKey
-  const effectiveMessageText =
+  let effectiveMessageText =
     shouldSeedTransport && localSessionState
       ? buildSeededTurnMessage(localSessionState.messages, text)
       : text
@@ -3462,26 +3462,49 @@ export async function sendChatMessage(
     const canSafelyFallbackToCli =
       !persistedSessionKey &&
       (Boolean(localSessionState) || matchedSession?.localOnly === true || shouldForkVisibleConversation)
+    const canCreateLocalFallbackShell = Boolean(persistedSessionKey)
     appendChatTrace({
       operation: 'send',
-      stage: canSafelyFallbackToCli ? 'gateway-unavailable-cli-fallback' : 'gateway-unavailable',
+      stage:
+        canSafelyFallbackToCli || canCreateLocalFallbackShell
+          ? 'gateway-unavailable-cli-fallback'
+          : 'gateway-unavailable',
       sessionId,
       sessionKey: persistedSessionKey || undefined,
       historySource: traceHistorySource,
       confirmedModel: String(matchedSession?.model || localSessionState?.model || targetModel || '').trim() || undefined,
       intentSelectedModel: String(localSessionState?.selectedModel || targetModel || '').trim() || undefined,
       failureClass: classifyChatFailureClass(messageText),
-      message: canSafelyFallbackToCli
+      message: canSafelyFallbackToCli || canCreateLocalFallbackShell
         ? `${messageText}；falling back to CLI transport for a local-safe conversation shell.`
         : messageText,
     })
-    if (!canSafelyFallbackToCli) {
+    if (!canSafelyFallbackToCli && !canCreateLocalFallbackShell) {
       return {
         ok: false,
         sessionId,
         errorCode: 'gateway-offline',
         messageText,
       }
+    }
+    if (!canSafelyFallbackToCli && canCreateLocalFallbackShell) {
+      const fallbackSession = await createLocalFallbackChatSession(scopeKey, now())
+      sessionId = fallbackSession.sessionId
+      transportSessionId = fallbackSession.sessionId
+      persistedSessionKey = undefined
+      effectiveMessageText = text
+      localSessionState = await readLocalChatSessionState(scopeKey, sessionId)
+      matchedSession = fallbackSession
+      appendChatTrace({
+        operation: 'send',
+        stage: 'external-key-local-fallback-created',
+        sessionId,
+        historySource: 'local-cache',
+        confirmedModel: String(targetModel || fallbackSession.model || '').trim() || undefined,
+        intentSelectedModel: String(targetModel || '').trim() || undefined,
+        failureClass: 'none',
+        message: 'Created a local fallback shell instead of continuing an external session key through CLI.',
+      })
     }
     chatTransport = cliTransport
   }
